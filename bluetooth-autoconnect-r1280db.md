@@ -70,7 +70,7 @@ Type=oneshot
 ExecStart=%h/.local/bin/bt-autoconnect.sh %i
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 ```
 
 This is a systemd **template** unit (note the `@` before `.service`). The
@@ -82,8 +82,19 @@ identification.
 - `After=bluetooth.target` — waits until the Bluetooth stack is up before
   trying to connect.
 - `Type=oneshot` — runs once, then exits; not a long-running daemon.
-- `WantedBy=default.target` — starts automatically at every login, once
-  enabled.
+- `WantedBy=graphical-session.target` — starts on every actual GNOME
+  login/logout cycle. **Do not use `default.target` here** — that target
+  belongs to `user@<uid>.service`, the per-user systemd manager, which
+  starts once and then stays running across multiple GNOME logout/login
+  cycles as long as anything else (a terminal, an SSH session, another
+  process) holds a session open for your user. A oneshot unit
+  `WantedBy=default.target` therefore only fires once per that manager's
+  lifetime — effectively once per boot in practice — not on every desktop
+  logout/login, even though `enable --now` and a fresh boot both look like
+  they work. `graphical-session.target` is the target gnome-session itself
+  starts and stops on every real login/logout, independent of whether the
+  user manager stays resident, so it's the correct target for
+  "run this each time I log into the desktop."
 
 Using a **user** service (rather than a system-wide one) means it runs in
 your session with access to your D-Bus session bus, which is what
@@ -95,6 +106,10 @@ your session with access to your D-Bus session bus, which is what
 systemctl --user daemon-reload
 systemctl --user enable --now 'bt-autoconnect@5C:C6:E9:8D:29:D7.service'
 ```
+
+(If you're migrating an existing instance off `default.target`, run
+`systemctl --user disable` first so the old `default.target.wants` symlink
+is removed before re-enabling under the new target.)
 
 `enable` creates the symlink so it starts on every future login;
 `--now` also starts it immediately for the current session.
